@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_downloader/flutter_downloader.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,6 +14,14 @@ void main() async {
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     await InAppWebViewController.setWebContentsDebuggingEnabled(kDebugMode);
   }
+
+  // Plugin must be initialized before using
+  await FlutterDownloader.initialize(
+      debug:
+          kDebugMode, // optional: set to false to disable printing logs to console (default: true)
+      ignoreSsl:
+          true // option: set to false to disable working with http links (default: false)
+      );
 
   runApp(
     MaterialApp(
@@ -43,7 +53,9 @@ class _MyHomePageState extends State<MyHomePage> {
       mediaPlaybackRequiresUserGesture: false,
       allowsInlineMediaPlayback: true,
       iframeAllow: "camera; microphone",
-      iframeAllowFullscreen: true);
+      iframeAllowFullscreen: true,
+      allowsBackForwardNavigationGestures: true,
+      useOnDownloadStart: true);
 
   PullToRefreshController? pullToRefreshController;
   String url = "";
@@ -74,13 +86,33 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          children: <Widget>[
-            Expanded(
-              child: Stack(
-                children: [
-                  InAppWebView(
+      appBar: getListUrl(url) ? null : buildAppBar(context),
+      body: buildBody(context),
+    );
+  }
+
+  PreferredSizeWidget buildAppBar(BuildContext context) {
+    return AppBar(
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back),
+        onPressed: () async{
+          final canGoback = await webViewController?.canGoBack() ?? false;
+          if (canGoback) {
+            webViewController?.goBack(); 
+          }
+        }
+      ),
+    );
+  }
+
+  Widget buildBody(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        children: <Widget>[
+          Expanded(
+            child: Stack(
+              children: [
+                InAppWebView(
                     key: webViewKey,
                     initialUrlRequest:
                         URLRequest(url: WebUri("https://bsi.ciapps.id/")),
@@ -144,7 +176,8 @@ class _MyHomePageState extends State<MyHomePage> {
                         urlController.text = url;
                       });
                     },
-                    onUpdateVisitedHistory: (controller, url, androidIsReload) {
+                    onUpdateVisitedHistory:
+                        (controller, url, androidIsReload) {
                       setState(() {
                         this.url = url.toString();
                         urlController.text = this.url;
@@ -155,16 +188,39 @@ class _MyHomePageState extends State<MyHomePage> {
                         print(consoleMessage);
                       }
                     },
-                  ),
-                  progress < 1.0
-                      ? LinearProgressIndicator(value: progress)
-                      : Container(),
-                ],
-              ),
+                    onDownloadStartRequest:
+                        (controller, downloadStartRequest) async {
+                      final taskId = await FlutterDownloader.enqueue(
+                        url: url,
+                        savedDir:
+                            (await getExternalStorageDirectory())?.path ?? '',
+                        saveInPublicStorage: true,
+                        showNotification:
+                            true, // show download progress in status bar (for Android)
+                        openFileFromNotification:
+                            true, // click on notification to open downloaded file (for Android)
+                      );
+                      if (kDebugMode) {
+                        print('onDownloadStart $url');
+                        print('onDownload taskId: $taskId');
+                      }
+                    }),
+                progress < 1.0
+                    ? LinearProgressIndicator(value: progress)
+                    : Container(),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
+  }
+
+  bool getListUrl(String url) {
+    final listUrl = [
+      "https://bsi.ciapps.id/",
+      "https://bsi.ciapps.id/page/dashboard",
+    ];
+    return listUrl.contains(url);
   }
 }
