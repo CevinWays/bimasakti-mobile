@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
@@ -61,6 +64,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String url = "";
   double progress = 0;
   final urlController = TextEditingController();
+  DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
 
   @override
   void initState() {
@@ -94,14 +98,13 @@ class _MyHomePageState extends State<MyHomePage> {
   PreferredSizeWidget buildAppBar(BuildContext context) {
     return AppBar(
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () async{
-          final canGoback = await webViewController?.canGoBack() ?? false;
-          if (canGoback) {
-            webViewController?.goBack(); 
-          }
-        }
-      ),
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () async {
+            final canGoback = await webViewController?.canGoBack() ?? false;
+            if (canGoback) {
+              webViewController?.goBack();
+            }
+          }),
     );
   }
 
@@ -176,8 +179,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         urlController.text = url;
                       });
                     },
-                    onUpdateVisitedHistory:
-                        (controller, url, androidIsReload) {
+                    onUpdateVisitedHistory: (controller, url, androidIsReload) {
                       setState(() {
                         this.url = url.toString();
                         urlController.text = this.url;
@@ -190,19 +192,38 @@ class _MyHomePageState extends State<MyHomePage> {
                     },
                     onDownloadStartRequest:
                         (controller, downloadStartRequest) async {
-                      final taskId = await FlutterDownloader.enqueue(
-                        url: url,
-                        savedDir:
-                            (await getExternalStorageDirectory())?.path ?? '',
-                        saveInPublicStorage: true,
-                        showNotification:
-                            true, // show download progress in status bar (for Android)
-                        openFileFromNotification:
-                            true, // click on notification to open downloaded file (for Android)
-                      );
-                      if (kDebugMode) {
-                        print('onDownloadStart $url');
-                        print('onDownload taskId: $taskId');
+                      var permissionStatus;
+
+                      if (await isBelowAndroid32(deviceInfo)) {
+                        permissionStatus = await Permission.storage.request();
+                      } else {
+                        permissionStatus =
+                            await Permission.photos.request();
+                      }
+
+                      if (permissionStatus == PermissionStatus.granted) {
+                        final directory = (Platform.isAndroid)
+                            ? await getExternalStorageDirectory()
+                            : await getApplicationDocumentsDirectory();
+
+                        String fileExtension = url.split('.').last;
+                        String filename = '${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+
+                        final taskId = await FlutterDownloader.enqueue(
+                          fileName: downloadStartRequest.suggestedFilename ?? filename,
+                          //TODO : ulater use downloadStartRequest.url
+                          url: url,
+                          savedDir: directory?.path ?? '',
+                          saveInPublicStorage: true,
+                          showNotification:
+                              true, // show download progress in status bar (for Android)
+                          openFileFromNotification:
+                              true, // click on notification to open downloaded file (for Android)
+                        );
+                        if (kDebugMode) {
+                          print('onDownloadStart $url');
+                          print('onDownload taskId: $taskId');
+                        }
                       }
                     }),
                 progress < 1.0
@@ -222,5 +243,10 @@ class _MyHomePageState extends State<MyHomePage> {
       "https://bsi.ciapps.id/page/dashboard",
     ];
     return listUrl.contains(url);
+  }
+
+  static Future<bool> isBelowAndroid32(DeviceInfoPlugin deviceInfo) async {
+    final androidInfo = await deviceInfo.androidInfo;
+    return androidInfo.version.sdkInt < 32;
   }
 }
