@@ -1,3 +1,6 @@
+# [1.0.0+3] - July 22 2024
+[Feature] Handle donwload
+
 # [1.0.0+2] - July 19 2024
 [Feature] Handle navigation back
 

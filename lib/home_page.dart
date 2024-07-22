@@ -1,10 +1,13 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
+import 'package:flutter_file_dialog/flutter_file_dialog.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -90,9 +93,6 @@ class _HomePageState extends State<HomePage> {
                         URLRequest(url: WebUri("https://bsi.ciapps.id/")),
                     initialSettings: settings,
                     pullToRefreshController: pullToRefreshController,
-                    onWebViewCreated: (controller) {
-                      webViewController = controller;
-                    },
                     onLoadStart: (controller, url) {
                       setState(() {
                         this.url = url.toString();
@@ -174,31 +174,58 @@ class _HomePageState extends State<HomePage> {
                             ? await getExternalStorageDirectory()
                             : await getApplicationDocumentsDirectory();
 
-                        String fileExtension = url.split('.').last;
+                        List<String>? partsMime =
+                            downloadStartRequest.mimeType?.split('/');
+                        final extensionType = partsMime?[1];
                         String filename =
-                            '${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+                            '${DateTime.now().millisecondsSinceEpoch}.$extensionType';
+                        List<String>? partsUrl =
+                            downloadStartRequest.url.toString().split(',');
 
-                        final taskId = await FlutterDownloader.enqueue(
-                          fileName: downloadStartRequest.suggestedFilename ??
-                              filename,
-                          //TODO : ulater use downloadStartRequest.url
-                          url: url,
-                          savedDir: directory?.path ?? '',
-                          saveInPublicStorage: true,
-                          showNotification:
-                              true, // show download progress in status bar (for Android)
-                          openFileFromNotification:
-                              true, // click on notification to open downloaded file (for Android)
-                        );
+                        final suggestFileName =
+                            downloadStartRequest.suggestedFilename;
+
+                        if (partsUrl.length > 1) {
+                          final base64Data = partsUrl[1];
+                          _createFileFromBase64(
+                              base64content: base64Data,
+                              fileName: DateTime.now()
+                                  .millisecondsSinceEpoch
+                                  .toString(),
+                              yourExtension: extensionType ?? '',
+                              directory: directory);
+                        } else {
+                          try {
+                            await FlutterDownloader.enqueue(
+                              fileName: suggestFileName ?? filename,
+                              url: downloadStartRequest.url.toString(),
+                              savedDir: directory?.path ?? '',
+                              saveInPublicStorage: true,
+                              showNotification: true,
+                              openFileFromNotification: true,
+                            );
+                          } catch (e) {
+                            final base64Data = partsUrl[1];
+                            _createFileFromBase64(
+                                base64content: base64Data,
+                                fileName: DateTime.now()
+                                    .millisecondsSinceEpoch
+                                    .toString(),
+                                yourExtension: extensionType ?? '',
+                                directory: directory);
+                          }
+                        }
                         if (kDebugMode) {
-                          print('onDownloadStart $url');
-                          print('onDownload taskId: $taskId');
+                          print('onDownloadStart ${downloadStartRequest.url}');
                         }
                       }
                     }),
                 progress < 1.0
-                    ? LinearProgressIndicator(value: progress)
-                    : Container(),
+                    ? LinearProgressIndicator(
+                        value: progress,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                      )
+                    : SizedBox.shrink(),
               ],
             ),
           ),
@@ -218,5 +245,27 @@ class _HomePageState extends State<HomePage> {
   static Future<bool> isBelowAndroid32(DeviceInfoPlugin deviceInfo) async {
     final androidInfo = await deviceInfo.androidInfo;
     return androidInfo.version.sdkInt < 32;
+  }
+
+  void _createFileFromBase64(
+      {required String base64content,
+      required String fileName,
+      required String yourExtension,
+      Directory? directory}) async {
+    var bytes = base64Decode(base64content.replaceAll('\n', ''));
+    final file = File("${directory?.path}/$fileName.$yourExtension");
+    await file.writeAsBytes(bytes.buffer.asUint8List());
+
+    final params = SaveFileDialogParams(
+      data: file.readAsBytesSync(),
+      fileName: '$fileName.$yourExtension',
+    );
+    final filePath = await FlutterFileDialog.saveFile(params: params);
+
+    if (filePath != null) {
+      print(filePath);
+      await OpenFile.open("${directory?.path}/$fileName.$yourExtension");
+    }
+    setState(() {});
   }
 }
