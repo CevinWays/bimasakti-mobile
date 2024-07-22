@@ -34,7 +34,9 @@ class _HomePageState extends State<HomePage> {
 
   PullToRefreshController? pullToRefreshController;
   String url = "";
+  String cookiesString = '';
   double progress = 0;
+  String? token;
   final urlController = TextEditingController();
   DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
 
@@ -61,9 +63,19 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: getListUrl(url) ? null : buildAppBar(context),
-      body: buildBody(context),
+    return WillPopScope(
+      onWillPop: () async {
+        final canGoback = await webViewController?.canGoBack() ?? false;
+        if (canGoback) {
+          webViewController?.goBack();
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+        // appBar: getListUrl(url) ? null : buildAppBar(context),
+        body: buildBody(context),
+      ),
     );
   }
 
@@ -88,6 +100,7 @@ class _HomePageState extends State<HomePage> {
             child: Stack(
               children: [
                 InAppWebView(
+                    keepAlive: InAppWebViewKeepAlive(),
                     key: webViewKey,
                     initialUrlRequest:
                         URLRequest(url: WebUri("https://bsi.ciapps.id/")),
@@ -98,6 +111,9 @@ class _HomePageState extends State<HomePage> {
                         this.url = url.toString();
                         urlController.text = this.url;
                       });
+                    },
+                    onWebViewCreated: (controller) {
+                      webViewController = controller;
                     },
                     onPermissionRequest: (controller, request) async {
                       return PermissionResponse(
@@ -131,9 +147,18 @@ class _HomePageState extends State<HomePage> {
                     },
                     onLoadStop: (controller, url) async {
                       pullToRefreshController?.endRefreshing();
+                      cookiesString = '';
+                      List<Cookie> cookies =
+                          await CookieManager().getCookies(url: url!);
+                      for (Cookie cookie in cookies) {
+                        cookiesString += '${cookie.name}=${cookie.value}';
+                      }
+                      print('ini cookie nya ya: ${cookiesString}');
                       setState(() {
                         this.url = url.toString();
                         urlController.text = this.url;
+                        this.cookiesString = cookiesString;
+                        token = url.queryParameters["token"];
                       });
                     },
                     onReceivedError: (controller, request, error) {
@@ -185,6 +210,10 @@ class _HomePageState extends State<HomePage> {
                         final suggestFileName =
                             downloadStartRequest.suggestedFilename;
 
+                        final urlFinal = downloadStartRequest.url.toString() +
+                            '/' +
+                            (suggestFileName ?? filename);
+
                         if (partsUrl.length > 1) {
                           final base64Data = partsUrl[1];
                           _createFileFromBase64(
@@ -198,11 +227,16 @@ class _HomePageState extends State<HomePage> {
                           try {
                             await FlutterDownloader.enqueue(
                               fileName: suggestFileName ?? filename,
-                              url: downloadStartRequest.url.toString(),
+                              url: urlFinal,
                               savedDir: directory?.path ?? '',
                               saveInPublicStorage: true,
                               showNotification: true,
                               openFileFromNotification: true,
+                              headers: {
+                                "authorization": "Basic $token",
+                                "connection": "keep-alive",
+                                "cookie": cookiesString,
+                              },
                             );
                           } catch (e) {
                             final base64Data = partsUrl[1];
