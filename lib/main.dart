@@ -32,6 +32,7 @@ void main() async {
         useMaterial3: true,
       ),
       home: const SplashPage(),
+      debugShowCheckedModeBanner: kDebugMode ? true : false,
     ),
   );
 }
