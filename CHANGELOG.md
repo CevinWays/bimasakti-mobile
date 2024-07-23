@@ -1,3 +1,6 @@
+# [1.0.0+4] - July 23 2024
+[Feature] Handle donwload with cookies for auth
+
 # [1.0.0+3] - July 22 2024
 [Feature] Handle donwload
 
