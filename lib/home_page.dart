@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_downloader/flutter_downloader.dart';
@@ -30,6 +31,7 @@ class _HomePageState extends State<HomePage> {
       iframeAllow: "camera; microphone",
       iframeAllowFullscreen: true,
       allowsBackForwardNavigationGestures: true,
+      sharedCookiesEnabled: true,
       useOnDownloadStart: true);
 
   PullToRefreshController? pullToRefreshController;
@@ -39,6 +41,7 @@ class _HomePageState extends State<HomePage> {
   String? token;
   final urlController = TextEditingController();
   DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+  final dio = Dio();
 
   @override
   void initState() {
@@ -73,7 +76,11 @@ class _HomePageState extends State<HomePage> {
         return true;
       },
       child: Scaffold(
-        // appBar: getListUrl(url) ? null : buildAppBar(context),
+        appBar: getListUrl(url)
+            ? null
+            : Platform.isIOS
+                ? buildAppBar(context)
+                : null,
         body: buildBody(context),
       ),
     );
@@ -151,7 +158,7 @@ class _HomePageState extends State<HomePage> {
                       List<Cookie> cookies =
                           await CookieManager().getCookies(url: url!);
                       for (Cookie cookie in cookies) {
-                        cookiesString += '${cookie.name}=${cookie.value}';
+                        cookiesString += '${cookie.name}=${cookie.value};';
                       }
                       print('ini cookie nya ya: ${cookiesString}');
                       setState(() {
@@ -226,18 +233,53 @@ class _HomePageState extends State<HomePage> {
                         } else {
                           try {
                             await FlutterDownloader.enqueue(
-                              fileName: suggestFileName ?? filename,
+                              fileName: filename,
                               url: urlFinal,
                               savedDir: directory?.path ?? '',
                               saveInPublicStorage: true,
                               showNotification: true,
                               openFileFromNotification: true,
                               headers: {
-                                "authorization": "Basic $token",
                                 "connection": "keep-alive",
                                 "cookie": cookiesString,
                               },
                             );
+                            // await dio.download(
+                            //   urlFinal,
+                            //   (Headers headers){
+                            //     // Extra info: redirect counts
+                            //     print(headers.value('redirects'));
+                            //     ///        // Extra info: real uri
+                            //            print(headers.value('uri'));
+                            //     return '${directory?.path}/${suggestFileName ?? filename}';
+                            //   },
+                            //   options: Options(
+                            //     // responseType: ResponseType.bytes,
+                            //     // followRedirects: true,
+                            //     // validateStatus: (status) {
+                            //     //   return status! < 500;
+                            //     // },
+                            //     headers: {
+                            //       // "authorization": "Basic $token",
+                            //       "connection": "keep-alive",
+                            //       "cookie": cookiesString,
+                            //     },
+                            //   ),
+                            //   onReceiveProgress: (recivedBytes, totalBytes) {
+                            //     // final progressString =
+                            //     //     ((recivedBytes / totalBytes) * 100);
+                            //     // setState(() {
+                            //     //   this.progress = progressString;
+                            //     // });
+
+                            //     // if (_progressString == "100%") {
+                            //     //   Scaffold.of(context).showSnackBar(SnackBar(
+                            //     //       content: Text("Next Action...")));
+                            //     //   // NextAction();
+                            //     // }
+                            //   },
+                            //   deleteOnError: true,
+                            // );
                           } catch (e) {
                             final base64Data = partsUrl[1];
                             _createFileFromBase64(
