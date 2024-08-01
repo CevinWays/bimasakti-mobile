@@ -195,10 +195,14 @@ class _HomePageState extends State<HomePage> {
                         (controller, downloadStartRequest) async {
                       var permissionStatus;
 
-                      if (await isBelowAndroid32(deviceInfo)) {
-                        permissionStatus = await Permission.storage.request();
+                      if ((Platform.isAndroid)) {
+                        if (await isBelowAndroid32(deviceInfo)) {
+                          permissionStatus = await Permission.storage.request();
+                        } else {
+                          permissionStatus = await Permission.photos.request();
+                        }
                       } else {
-                        permissionStatus = await Permission.photos.request();
+                        permissionStatus = await Permission.storage.request();
                       }
 
                       if (permissionStatus == PermissionStatus.granted) {
