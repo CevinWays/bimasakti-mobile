@@ -1,3 +1,6 @@
+# [1.0.0+5] - August 25 2024
+[Feature] Integrate with codemagic
+
 # [1.0.0+4] - July 23 2024
 [Feature] Handle donwload with cookies for auth
 
